@@ -1,0 +1,56 @@
+version: "3.9"
+
+x-app-image: &app_image "${DOCKERHUB_USER:-local}/tp02-web:${APP_TAG:-v1.0}"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tp02-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app-qa:
+    build: .
+    image: *app_image
+    container_name: tp02-app-qa
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: qa
+      LOG_LEVEL: debug
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@db:5432/app_qa
+    ports:
+      - "8081:3000"
+    restart: unless-stopped
+
+  app-prod:
+    image: *app_image
+    container_name: tp02-app-prod
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      LOG_LEVEL: info
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@db:5432/app_prod
+    ports:
+      - "8082:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
