@@ -1,31 +1,54 @@
-# estado de servicios
+# decisiones.md – TP02 Docker
 
-docker compose ps
+## Aplicación y tecnología
 
-# health de QA y PROD
+Se usó **Node.js con Express** por ser simple, ligero y estándar para pruebas rápidas.
 
-curl http://localhost:8081/health
-curl http://localhost:8082/health
+## Imagen base
 
-# prueba de datos
+**node:22-alpine**, oficial, actualizada y liviana. Permite reducir tamaño y tiempos de build.
 
-curl -X POST http://localhost:8081/messages -H 'Content-Type: application/json' -d '{"content":"evidencia QA"}'
-curl http://localhost:8081/messages
+## Base de datos
 
-curl -X POST http://localhost:8082/messages -H 'Content-Type: application/json' -d '{"content":"evidencia PROD"}'
-curl http://localhost:8082/messages
+**PostgreSQL 16**, por robustez y compatibilidad. Se crearon dos bases: `app_qa` y `app_prod`.
 
-# persistencia (reinicio DB y ver datos)
+## Dockerfile
 
-docker compose restart db
-curl http://localhost:8081/messages
+- `FROM node:22-alpine`: base mínima.
+- `WORKDIR /app`: directorio de trabajo.
+- `COPY package*.json` + `npm install --omit=dev`: dependencias de prod.
+- `COPY . .`: código.
+- `USER app`: menor privilegio.
+- `EXPOSE 3000` + `HEALTHCHECK`: visibilidad y pruebas básicas.
+- `CMD ["node", "server.js"]`: arranque de la app.
 
-# misma imagen (IDs iguales)
+## QA y PROD
 
-docker inspect -f '{{.Image}}' tp02-app-qa
-docker inspect -f '{{.Image}}' tp02-app-prod
+Misma imagen, distinta config por variables de entorno:
 
-# volúmenes
+- `APP_ENV` (qa/prod)
+- `DATABASE_URL` (bases separadas)
+- `LOG_LEVEL` (debug/info)
+- Puertos: QA en 8081, PROD en 8082.
 
-docker volume ls
-docker volume inspect tp02-docker-app_pgdata 2>/dev/null || true
+## Persistencia
+
+Volumen `pgdata` montado en `/var/lib/postgresql/data`. Garantiza que los datos sobrevivan a reinicios.
+
+## Versionado y publicación
+
+Tags: `dev` (desarrollo) y `v1.0` (estable). Convención SemVer para futuras versiones. Publicación en Docker Hub con `usuario/tp02-web:<tag>`.
+
+## Evidencia
+
+- QA: `curl http://localhost:8081/health` → `{status:"ok",env:"qa"}`
+- PROD: `curl http://localhost:8082/health` → `{status:"ok",env:"prod"}`
+- Conexión DB: `/db/ping` responde `db:"up"`.
+- Datos persisten tras `docker compose restart db`.
+
+## Problemas y soluciones
+
+- **Conn refused DB** → esperar a que `db` esté healthy.
+- **Puertos ocupados** → cambio a 8081/8082.
+- **Permisos volumen (Mac)** → uso de named volumes.
+- **Push fallido a Docker Hub** → corregido con `docker login` + `docker tag` correcto.
